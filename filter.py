@@ -36,6 +36,12 @@ st.markdown("""
         padding: 14px 18px; margin-bottom: 10px;
         background: rgba(68,114,196,0.05);
     }
+    /* Hide toolbar, deploy button, source code viewer, main menu */
+    .stAppDeployButton, #MainMenu, header[data-testid="stHeader"],
+    button[title="View app source"], .viewerBadge_container__r5tak,
+    ._profileContainer_gzau3_53, [data-testid="stToolbar"] {
+        display: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
