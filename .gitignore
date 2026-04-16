@@ -1,0 +1,7 @@
+*.xlsx
+*.xls
+__pycache__/
+*.pyc
+.streamlit/
+.claude/
+product_head.json
