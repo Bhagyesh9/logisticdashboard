@@ -6,7 +6,8 @@ from plotly.subplots import make_subplots
 import numpy as np
 import os
 
-st.set_page_config(page_title="HUL Logistics Filter", layout="wide")
+st.set_page_config(page_title="HUL Logistics Filter", layout="wide",
+                   initial_sidebar_state="expanded")
 
 # ── CSS ──
 st.markdown("""
@@ -42,15 +43,34 @@ st.markdown("""
     ._profileContainer_gzau3_53, [data-testid="stToolbar"] {
         display: none !important;
     }
-    /* Make header transparent (no bar visible) but keep the sidebar collapse/expand button functional */
+    /* Keep header visible but make it small/transparent; preserve the sidebar collapse/expand button */
     header[data-testid="stHeader"] {
-        background: transparent !important;
+        background: rgba(255,255,255,0.0) !important;
         box-shadow: none !important;
+        height: 3rem !important;
+        min-height: 3rem !important;
+        z-index: 999990 !important;
     }
-    /* Ensure collapsed sidebar control is always visible */
-    [data-testid="collapsedControl"] {
-        display: block !important;
+    /* Force all possible sidebar expand-arrow selectors to show */
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebarCollapseButton"],
+    button[kind="headerNoPadding"] {
+        display: flex !important;
         visibility: visible !important;
+        opacity: 1 !important;
+        z-index: 999999 !important;
+        color: #1B2A4A !important;
+    }
+    /* Make the chevron icon clearly visible against white bg */
+    [data-testid="collapsedControl"] svg,
+    [data-testid="stSidebarCollapsedControl"] svg,
+    [data-testid="stSidebarCollapseButton"] svg,
+    header[data-testid="stHeader"] svg {
+        color: #1B2A4A !important;
+        fill: #1B2A4A !important;
+        width: 1.5rem !important;
+        height: 1.5rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
