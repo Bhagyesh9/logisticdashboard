@@ -139,9 +139,21 @@ def load_analysis_data():
 
 
 def compute_filtered_data(sheets, material_set, dispatch_filter, cluster_filter,
-                          route_filter, truck_filter):
-    """Filter all sheets by material, dispatch, cluster, route, truck type."""
+                          route_filter, truck_filter, month_filter=None, tdp_filter=None):
+    """Filter all sheets by material, dispatch, cluster, route, truck, month, TDP."""
     lpd = sheets.get("Leg Product Detail", pd.DataFrame())
+    ld_raw = sheets.get("Leg Detail", pd.DataFrame())
+
+    # Month/TDP live on Leg Detail — restrict to allowed leg IDs first
+    leg_restrict = None
+    if not ld_raw.empty:
+        ld_mask = pd.Series(True, index=ld_raw.index)
+        if month_filter and "Month" in ld_raw.columns:
+            ld_mask &= ld_raw["Month"].astype(str).isin(month_filter)
+        if tdp_filter and "TDP" in ld_raw.columns:
+            ld_mask &= ld_raw["TDP"].astype(str).isin(tdp_filter)
+        if month_filter or tdp_filter:
+            leg_restrict = set(ld_raw.loc[ld_mask, "Leg ID"].unique()) if "Leg ID" in ld_raw.columns else set()
 
     if material_set and not lpd.empty and "Material" in lpd.columns:
         lpd_filtered = lpd[lpd["Material"].isin(material_set)]
@@ -160,6 +172,9 @@ def compute_filtered_data(sheets, material_set, dispatch_filter, cluster_filter,
     if truck_filter and "Truck Type" in lpd_filtered.columns:
         lpd_filtered = lpd_filtered[lpd_filtered["Truck Type"].isin(truck_filter)]
 
+    if leg_restrict is not None and "Leg ID" in lpd_filtered.columns:
+        lpd_filtered = lpd_filtered[lpd_filtered["Leg ID"].isin(leg_restrict)]
+
     # Extract join keys
     shipment_set = set(lpd_filtered["Shipment No"].unique()) if "Shipment No" in lpd_filtered.columns else set()
     route_code_set = set(lpd_filtered["Route Code"].unique()) if "Route Code" in lpd_filtered.columns else set()
@@ -167,7 +182,7 @@ def compute_filtered_data(sheets, material_set, dispatch_filter, cluster_filter,
     leg_id_set = set(lpd_filtered["Leg ID"].unique()) if "Leg ID" in lpd_filtered.columns else set()
     cluster_code_set = set(lpd_filtered["Cluster Code"].dropna().unique()) if "Cluster Code" in lpd_filtered.columns else set()
 
-    any_active = material_set or dispatch_filter or cluster_filter or route_filter or truck_filter
+    any_active = material_set or dispatch_filter or cluster_filter or route_filter or truck_filter or month_filter or tdp_filter
     filtered = {"Leg Product Detail": lpd_filtered}
 
     for name in ["Leg Detail", "Outlier Legs"]:
@@ -648,6 +663,24 @@ truck_filter = st.sidebar.multiselect(
     "Truck Type", all_trucks, default=[], placeholder="All truck types"
 )
 
+# Month and TDP (leg-level)
+ld_raw = sheets.get("Leg Detail", pd.DataFrame())
+if "Month" in ld_raw.columns:
+    all_months = sorted(ld_raw["Month"].dropna().astype(str).unique())
+else:
+    all_months = []
+month_filter = st.sidebar.multiselect(
+    "Month", all_months, default=[], placeholder="All months"
+)
+
+if "TDP" in ld_raw.columns:
+    all_tdps = sorted(ld_raw["TDP"].dropna().astype(str).unique())
+else:
+    all_tdps = []
+tdp_filter = st.sidebar.multiselect(
+    "TDP", all_tdps, default=[], placeholder="All TDPs"
+)
+
 # Sidebar summary
 st.sidebar.divider()
 active_filters = []
@@ -661,6 +694,10 @@ if route_filter:
     active_filters.append(f"Route: **{len(route_filter)}** selected")
 if truck_filter:
     active_filters.append(f"Truck: **{', '.join(truck_filter)}**")
+if month_filter:
+    active_filters.append(f"Month: **{len(month_filter)}** selected")
+if tdp_filter:
+    active_filters.append(f"TDP: **{len(tdp_filter)}** selected")
 if active_filters:
     st.sidebar.info(" | ".join(active_filters))
 else:
@@ -671,7 +708,7 @@ if st.sidebar.button("Reset Filters"):
 
 # ── Apply all filters ──
 filtered = compute_filtered_data(sheets, material_set, dispatch_filter, cluster_filter,
-                                 route_filter, truck_filter)
+                                 route_filter, truck_filter, month_filter, tdp_filter)
 
 lpd = filtered.get("Leg Product Detail", pd.DataFrame())
 ld = filtered.get("Leg Detail", pd.DataFrame())
