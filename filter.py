@@ -38,10 +38,15 @@ st.markdown("""
         padding: 14px 18px; margin-bottom: 10px;
         background: rgba(68,114,196,0.05);
     }
-    /* Hide toolbar, deploy button, source code viewer, main menu — but KEEP header so sidebar toggle stays visible */
+    /* Hide deploy button, source code viewer, main menu — but KEEP stToolbar and header so sidebar expand arrow stays visible on Streamlit Cloud */
     .stAppDeployButton, #MainMenu,
     button[title="View app source"], .viewerBadge_container__r5tak,
-    ._profileContainer_gzau3_53, [data-testid="stToolbar"] {
+    ._profileContainer_gzau3_53 {
+        display: none !important;
+    }
+    /* Hide only specific toolbar children we don't want (not the whole toolbar) */
+    [data-testid="stToolbar"] [data-testid="stToolbarActions"],
+    [data-testid="stToolbar"] .stDeployButton {
         display: none !important;
     }
     /* Keep header visible but make it small/transparent; preserve the sidebar collapse/expand button */
