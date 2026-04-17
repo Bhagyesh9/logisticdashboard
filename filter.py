@@ -580,7 +580,10 @@ st.title("HUL Logistics — Global Filter Dashboard")
 products = load_product_names()
 sheets = load_analysis_data()
 
-# ── Sidebar: Product Filters (cascading) ──
+# ── Sidebar: Logo + Product Filters (cascading) ──
+if os.path.exists("hul_logo.png"):
+    st.sidebar.image("hul_logo.png", use_container_width=True)
+    st.sidebar.divider()
 st.sidebar.header("Product Filters")
 pf = products.copy()
 
