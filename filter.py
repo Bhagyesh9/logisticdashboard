@@ -570,6 +570,70 @@ def chart_brand_waste(brand_summary):
     return fig
 
 
+def top_transporters_summary(ld, top_n=5):
+    """Top-N transporters by spend from filtered Leg Detail."""
+    if ld.empty or "Transporter" not in ld.columns:
+        return None, []
+    grp = ld.groupby("Transporter", dropna=True).agg(
+        Legs=("Leg ID", "count"),
+        Weight=("Leg Weight (T)", "sum"),
+        Spend=("Leg Cost (Rs)", "sum"),
+        Waste=("Waste (Rs)", "sum") if "Waste (Rs)" in ld.columns else ("Leg ID", "count"),
+        Util=("Utilisation %", "mean") if "Utilisation %" in ld.columns else ("Leg ID", "count"),
+    ).reset_index()
+    grp["Waste %"] = grp["Waste"] / grp["Spend"].replace(0, np.nan) * 100
+    grp["CPT"] = grp["Spend"] / grp["Weight"].replace(0, np.nan)
+    grp = grp.sort_values("Spend", ascending=False).head(top_n)
+    grp.columns = ["Transporter", "Legs", "Weight (T)", "Spend (Rs)", "Waste (Rs)",
+                   "Avg Util %", "Waste %", "Avg CPT"]
+    grp = grp[["Transporter", "Legs", "Weight (T)", "Spend (Rs)", "Waste (Rs)",
+               "Waste %", "Avg Util %", "Avg CPT"]]
+    return grp, grp["Transporter"].tolist()
+
+
+def chart_transporter_truck_mix(ld, top_transporters):
+    """Stacked bar: spend per transporter broken down by truck type."""
+    if ld.empty or not top_transporters or "Truck Type" not in ld.columns:
+        return None
+    sub = ld[ld["Transporter"].isin(top_transporters)]
+    if sub.empty:
+        return None
+    pivot = sub.groupby(["Transporter", "Truck Type"], dropna=True)["Leg Cost (Rs)"].sum().reset_index()
+    fig = px.bar(pivot, x="Transporter", y="Leg Cost (Rs)", color="Truck Type",
+                 color_discrete_sequence=COLORS, barmode="stack",
+                 category_orders={"Transporter": top_transporters})
+    fig.update_layout(**CHART_LAYOUT, title="Top 5 Transporters — Spend by Truck Type",
+                      yaxis_tickformat=",", xaxis_tickangle=-20,
+                      legend=dict(orientation="h", y=-0.25))
+    return fig
+
+
+def transporter_truck_breakdown(ld, top_transporters):
+    """Per-transporter truck-wise performance table."""
+    if ld.empty or not top_transporters or "Truck Type" not in ld.columns:
+        return None
+    sub = ld[ld["Transporter"].isin(top_transporters)]
+    if sub.empty:
+        return None
+    grp = sub.groupby(["Transporter", "Truck Type"], dropna=True).agg(
+        Legs=("Leg ID", "count"),
+        Weight=("Leg Weight (T)", "sum"),
+        Spend=("Leg Cost (Rs)", "sum"),
+        Waste=("Waste (Rs)", "sum") if "Waste (Rs)" in sub.columns else ("Leg ID", "count"),
+        Util=("Utilisation %", "mean") if "Utilisation %" in sub.columns else ("Leg ID", "count"),
+    ).reset_index()
+    grp["Waste %"] = grp["Waste"] / grp["Spend"].replace(0, np.nan) * 100
+    grp["CPT"] = grp["Spend"] / grp["Weight"].replace(0, np.nan)
+    grp.columns = ["Transporter", "Truck Type", "Legs", "Weight (T)", "Spend (Rs)",
+                   "Waste (Rs)", "Avg Util %", "Waste %", "Avg CPT"]
+    grp = grp[["Transporter", "Truck Type", "Legs", "Weight (T)", "Spend (Rs)",
+               "Waste (Rs)", "Waste %", "Avg Util %", "Avg CPT"]]
+    # Sort by transporter order (by rank), then spend desc within transporter
+    grp["_rank"] = grp["Transporter"].map({t: i for i, t in enumerate(top_transporters)})
+    grp = grp.sort_values(["_rank", "Spend (Rs)"], ascending=[True, False]).drop(columns="_rank")
+    return grp
+
+
 def show_sheet_tab(name, df):
     st.caption(f"{len(df):,} rows")
     display_limit = 5_000
@@ -964,9 +1028,50 @@ else:
 st.divider()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 7. DATA TABLES
+# 7. TOP 5 TRANSPORTERS — TRUCK-WISE PERFORMANCE
 # ══════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="section-header">7. Data Tables</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-header">7. Top 5 Transporters — Truck-wise Performance</div>', unsafe_allow_html=True)
+
+top_trans_df, top_trans_list = top_transporters_summary(ld, top_n=5)
+if top_trans_df is not None and not top_trans_df.empty:
+    tr_c1, tr_c2 = st.columns([1, 1])
+    with tr_c1:
+        st.markdown("**Top 5 Transporters (by Spend)**")
+        disp_t = top_trans_df.copy()
+        disp_t["Legs"] = disp_t["Legs"].apply(fmt_num)
+        disp_t["Weight (T)"] = disp_t["Weight (T)"].apply(lambda x: f"{x:,.1f}")
+        disp_t["Spend (Rs)"] = disp_t["Spend (Rs)"].apply(fmt_rs)
+        disp_t["Waste (Rs)"] = disp_t["Waste (Rs)"].apply(fmt_rs)
+        disp_t["Waste %"] = disp_t["Waste %"].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
+        disp_t["Avg Util %"] = disp_t["Avg Util %"].apply(lambda x: f"{x:.1f}%" if pd.notna(x) and x > 0 else "-")
+        disp_t["Avg CPT"] = disp_t["Avg CPT"].apply(lambda x: f"{x:,.1f}" if pd.notna(x) else "-")
+        st.dataframe(disp_t, use_container_width=True, hide_index=True)
+    with tr_c2:
+        fig = chart_transporter_truck_mix(ld, top_trans_list)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("**Truck-wise Breakdown per Transporter**")
+    tbd = transporter_truck_breakdown(ld, top_trans_list)
+    if tbd is not None and not tbd.empty:
+        disp_b = tbd.copy()
+        disp_b["Legs"] = disp_b["Legs"].apply(fmt_num)
+        disp_b["Weight (T)"] = disp_b["Weight (T)"].apply(lambda x: f"{x:,.1f}")
+        disp_b["Spend (Rs)"] = disp_b["Spend (Rs)"].apply(fmt_rs)
+        disp_b["Waste (Rs)"] = disp_b["Waste (Rs)"].apply(fmt_rs)
+        disp_b["Waste %"] = disp_b["Waste %"].apply(lambda x: f"{x:.2f}%" if pd.notna(x) else "-")
+        disp_b["Avg Util %"] = disp_b["Avg Util %"].apply(lambda x: f"{x:.1f}%" if pd.notna(x) and x > 0 else "-")
+        disp_b["Avg CPT"] = disp_b["Avg CPT"].apply(lambda x: f"{x:,.1f}" if pd.notna(x) else "-")
+        st.dataframe(disp_b, use_container_width=True, hide_index=True)
+else:
+    st.info("No transporter data available for current filters")
+
+st.divider()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 8. DATA TABLES
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="section-header">8. Data Tables</div>', unsafe_allow_html=True)
 
 tab_names = [name for name in SHEET_PARQUETS if name in filtered]
 tabs = st.tabs(tab_names)
