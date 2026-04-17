@@ -108,18 +108,24 @@ components.html("""
             'border-radius:6px;cursor:pointer;font-weight:600;font-size:0.85rem;' +
             'box-shadow:0 2px 6px rgba(0,0,0,0.15);';
         btn.onclick = function() {
+            // Try 1: click Streamlit's native expand button if present
             var nativeBtn = doc.querySelector(
                 '[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"], [data-testid="stSidebarCollapseButton"]'
             );
             if (nativeBtn) { nativeBtn.click(); return; }
-            var sb = doc.querySelector('[data-testid="stSidebar"]');
-            if (sb) {
-                sb.setAttribute('aria-expanded', 'true');
-                sb.style.transform = 'translateX(0)';
-                sb.style.width = '21rem';
-                sb.style.minWidth = '21rem';
-                sb.style.visibility = 'visible';
+            // Try 2: find any button with sidebar-related aria-label or testid
+            var buttons = doc.querySelectorAll('button');
+            for (var i = 0; i < buttons.length; i++) {
+                var b = buttons[i];
+                var lbl = (b.getAttribute('aria-label') || '').toLowerCase();
+                var tid = (b.getAttribute('data-testid') || '').toLowerCase();
+                if (lbl.indexOf('sidebar') >= 0 || tid.indexOf('sidebar') >= 0 || tid.indexOf('collapse') >= 0) {
+                    b.click();
+                    return;
+                }
             }
+            // Fallback: reload the page — initial_sidebar_state='expanded' will re-open it
+            window.parent.location.reload();
         };
         doc.body.appendChild(btn);
     }
