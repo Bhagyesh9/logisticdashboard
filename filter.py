@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -38,75 +37,41 @@ st.markdown("""
         padding: 14px 18px; margin-bottom: 10px;
         background: rgba(68,114,196,0.05);
     }
-    /* Hide deploy button, source code viewer, main menu — but KEEP stToolbar and header so sidebar expand arrow stays visible on Streamlit Cloud */
+    /* Hide deploy button, source code viewer, main menu, toolbar */
     .stAppDeployButton, #MainMenu,
     button[title="View app source"], .viewerBadge_container__r5tak,
-    ._profileContainer_gzau3_53 {
+    ._profileContainer_gzau3_53, [data-testid="stToolbar"] {
         display: none !important;
     }
-    /* Hide only specific toolbar children we don't want (not the whole toolbar) */
-    [data-testid="stToolbar"] [data-testid="stToolbarActions"],
-    [data-testid="stToolbar"] .stDeployButton {
-        display: none !important;
-    }
-    /* Keep header visible but make it small/transparent; preserve the sidebar collapse/expand button */
     header[data-testid="stHeader"] {
-        background: rgba(255,255,255,0.0) !important;
+        background: transparent !important;
         box-shadow: none !important;
-        height: 3rem !important;
-        min-height: 3rem !important;
-        z-index: 999990 !important;
     }
-    /* Make sure sidebar itself is never forcibly hidden */
+    /* Always keep sidebar fully expanded — remove ability to collapse */
     [data-testid="stSidebar"] {
         display: block !important;
         visibility: visible !important;
+        transform: translateX(0) !important;
+        width: 21rem !important;
+        min-width: 21rem !important;
+        max-width: 21rem !important;
+        margin-left: 0 !important;
+    }
+    /* Hide any button that would collapse the sidebar */
+    [data-testid="stSidebar"] button[kind="header"],
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebar"] button[aria-label*="close" i],
+    [data-testid="stSidebar"] button[aria-label*="collapse" i] {
+        display: none !important;
+    }
+    /* Ensure main content doesn't overlap sidebar */
+    [data-testid="stAppViewContainer"] > .main {
+        margin-left: 21rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
-
-# Inject JS-powered fallback "Show Filters" button (st.markdown strips <script>, so use components.html)
-components.html("""
-<script>
-(function() {
-    var doc = window.parent.document;
-    function attach() {
-        if (doc.getElementById('show-filters-fallback')) return;
-        var btn = doc.createElement('button');
-        btn.id = 'show-filters-fallback';
-        btn.textContent = '☰ Show Filters';
-        btn.style.cssText = 'position:fixed;top:0.5rem;left:0.5rem;z-index:999998;' +
-            'background:#1B2A4A;color:white;border:none;padding:6px 14px;' +
-            'border-radius:6px;cursor:pointer;font-weight:600;font-size:0.85rem;' +
-            'box-shadow:0 2px 6px rgba(0,0,0,0.15);';
-        btn.onclick = function() {
-            // Try 1: click Streamlit's native expand button if present
-            var nativeBtn = doc.querySelector(
-                '[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"]'
-            );
-            if (nativeBtn) { nativeBtn.click(); return; }
-            // Try 2: any button whose aria-label mentions sidebar
-            var buttons = doc.querySelectorAll('button');
-            for (var i = 0; i < buttons.length; i++) {
-                var b = buttons[i];
-                var lbl = (b.getAttribute('aria-label') || '').toLowerCase();
-                if (lbl.indexOf('sidebar') >= 0 || lbl.indexOf('open navigation') >= 0) {
-                    b.click();
-                    return;
-                }
-            }
-            // Hard fallback: force a fresh page load with cache-bust, preserving query params
-            var url = window.parent.location.href;
-            var sep = url.indexOf('?') >= 0 ? '&' : '?';
-            window.parent.location.href = url.split('#')[0] + sep + '_r=' + Date.now();
-        };
-        doc.body.appendChild(btn);
-    }
-    attach();
-    new MutationObserver(attach).observe(doc.body, {childList: true, subtree: true});
-})();
-</script>
-""", height=0)
 
 PRODUCT_FILE = "product_names.parquet"
 
