@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -51,7 +52,7 @@ st.markdown("""
         min-height: 3rem !important;
         z-index: 999990 !important;
     }
-    /* Force all possible sidebar expand-arrow selectors to show */
+    /* Force all possible sidebar expand-arrow selectors to show at top-left */
     [data-testid="collapsedControl"],
     [data-testid="stSidebarCollapsedControl"],
     [data-testid="stSidebarCollapseButton"],
@@ -59,21 +60,74 @@ st.markdown("""
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
+        position: fixed !important;
+        top: 0.5rem !important;
+        left: 0.5rem !important;
         z-index: 999999 !important;
-        color: #1B2A4A !important;
+        background: #1B2A4A !important;
+        color: white !important;
+        border-radius: 6px !important;
+        padding: 4px !important;
     }
-    /* Make the chevron icon clearly visible against white bg */
     [data-testid="collapsedControl"] svg,
     [data-testid="stSidebarCollapsedControl"] svg,
     [data-testid="stSidebarCollapseButton"] svg,
     header[data-testid="stHeader"] svg {
-        color: #1B2A4A !important;
-        fill: #1B2A4A !important;
+        color: white !important;
+        fill: white !important;
         width: 1.5rem !important;
         height: 1.5rem !important;
     }
+    /* Our own fallback "Show Filters" button (always present, but hidden when sidebar expanded) */
+    #show-filters-fallback {
+        position: fixed; top: 0.5rem; left: 0.5rem; z-index: 999998;
+        background: #1B2A4A; color: white; border: none;
+        padding: 6px 14px; border-radius: 6px; cursor: pointer;
+        font-weight: 600; font-size: 0.85rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    [data-testid="stSidebar"][aria-expanded="true"] ~ * #show-filters-fallback,
+    [data-testid="stSidebar"]:not([aria-expanded="false"]) ~ * #show-filters-fallback {
+        display: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# Inject JS-powered fallback "Show Filters" button (st.markdown strips <script>, so use components.html)
+components.html("""
+<script>
+(function() {
+    var doc = window.parent.document;
+    function attach() {
+        if (doc.getElementById('show-filters-fallback')) return;
+        var btn = doc.createElement('button');
+        btn.id = 'show-filters-fallback';
+        btn.textContent = '☰ Show Filters';
+        btn.style.cssText = 'position:fixed;top:0.5rem;left:0.5rem;z-index:999998;' +
+            'background:#1B2A4A;color:white;border:none;padding:6px 14px;' +
+            'border-radius:6px;cursor:pointer;font-weight:600;font-size:0.85rem;' +
+            'box-shadow:0 2px 6px rgba(0,0,0,0.15);';
+        btn.onclick = function() {
+            var nativeBtn = doc.querySelector(
+                '[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"], [data-testid="stSidebarCollapseButton"]'
+            );
+            if (nativeBtn) { nativeBtn.click(); return; }
+            var sb = doc.querySelector('[data-testid="stSidebar"]');
+            if (sb) {
+                sb.setAttribute('aria-expanded', 'true');
+                sb.style.transform = 'translateX(0)';
+                sb.style.width = '21rem';
+                sb.style.minWidth = '21rem';
+                sb.style.visibility = 'visible';
+            }
+        };
+        doc.body.appendChild(btn);
+    }
+    attach();
+    new MutationObserver(attach).observe(doc.body, {childList: true, subtree: true});
+})();
+</script>
+""", height=0)
 
 PRODUCT_FILE = "product_names.parquet"
 
