@@ -153,8 +153,22 @@ def weighted_util(lpd, ld, group_col=None):
         return m["weighted_util"].sum() / total_wt
 
 
+def _optimize_memory(df):
+    """Downcast numerics and convert low-cardinality strings to category."""
+    for col in df.select_dtypes(include=["float64"]).columns:
+        df[col] = pd.to_numeric(df[col], downcast="float")
+    for col in df.select_dtypes(include=["int64"]).columns:
+        df[col] = pd.to_numeric(df[col], downcast="integer")
+    for col in df.select_dtypes(include=["object"]).columns:
+        n_unique = df[col].nunique(dropna=False)
+        if n_unique > 0 and n_unique / max(len(df), 1) < 0.5:
+            df[col] = df[col].astype("category")
+    return df
+
+
+@st.cache_data(show_spinner="Loading product names...")
 def load_product_names():
-    return pd.read_parquet(PRODUCT_FILE)
+    return _optimize_memory(pd.read_parquet(PRODUCT_FILE))
 
 
 @st.cache_data(show_spinner="Loading data...")
@@ -162,7 +176,7 @@ def load_analysis_data():
     sheets = {}
     for name, fname in SHEET_PARQUETS.items():
         if os.path.exists(fname):
-            sheets[name] = pd.read_parquet(fname)
+            sheets[name] = _optimize_memory(pd.read_parquet(fname))
     return sheets
 
 
@@ -744,10 +758,11 @@ src_desc_map = _plant_label_map(ld_raw, "Sending Plant", "Sending Desc")
 dst_desc_map = _plant_label_map(ld_raw, "Receiving Plant", "Receiving Desc")
 
 # Cascade space: LD restricted by product filter via leg IDs
-ld_space = ld_raw.copy()
 if material_set is not None and "Leg ID" in lpd_raw.columns and "Material" in lpd_raw.columns:
     mat_legs = set(lpd_raw.loc[lpd_raw["Material"].isin(material_set), "Leg ID"].unique())
-    ld_space = ld_space[ld_space["Leg ID"].isin(mat_legs)]
+    ld_space = ld_raw[ld_raw["Leg ID"].isin(mat_legs)]
+else:
+    ld_space = ld_raw
 
 # Read previous selections (by widget key); source/dest store "CODE — DESC" labels
 _src_prev = [l.split(" — ")[0] for l in st.session_state.get("f_source", [])]
