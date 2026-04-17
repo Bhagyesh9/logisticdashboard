@@ -139,8 +139,9 @@ def load_analysis_data():
 
 
 def compute_filtered_data(sheets, material_set, dispatch_filter, cluster_filter,
-                          route_filter, truck_filter, month_filter=None, tdp_filter=None):
-    """Filter all sheets by material, dispatch, cluster, route, truck, month, TDP."""
+                          route_filter, truck_filter, month_filter=None, tdp_filter=None,
+                          source_filter=None, dest_filter=None):
+    """Filter all sheets by material, dispatch, cluster, route, truck, month, TDP, source, dest."""
     lpd = sheets.get("Leg Product Detail", pd.DataFrame())
     ld_raw = sheets.get("Leg Detail", pd.DataFrame())
 
@@ -172,6 +173,12 @@ def compute_filtered_data(sheets, material_set, dispatch_filter, cluster_filter,
     if truck_filter and "Truck Type" in lpd_filtered.columns:
         lpd_filtered = lpd_filtered[lpd_filtered["Truck Type"].isin(truck_filter)]
 
+    if source_filter and "Sending Plant" in lpd_filtered.columns:
+        lpd_filtered = lpd_filtered[lpd_filtered["Sending Plant"].isin(source_filter)]
+
+    if dest_filter and "Receiving Plant" in lpd_filtered.columns:
+        lpd_filtered = lpd_filtered[lpd_filtered["Receiving Plant"].isin(dest_filter)]
+
     if leg_restrict is not None and "Leg ID" in lpd_filtered.columns:
         lpd_filtered = lpd_filtered[lpd_filtered["Leg ID"].isin(leg_restrict)]
 
@@ -182,7 +189,7 @@ def compute_filtered_data(sheets, material_set, dispatch_filter, cluster_filter,
     leg_id_set = set(lpd_filtered["Leg ID"].unique()) if "Leg ID" in lpd_filtered.columns else set()
     cluster_code_set = set(lpd_filtered["Cluster Code"].dropna().unique()) if "Cluster Code" in lpd_filtered.columns else set()
 
-    any_active = material_set or dispatch_filter or cluster_filter or route_filter or truck_filter or month_filter or tdp_filter
+    any_active = material_set or dispatch_filter or cluster_filter or route_filter or truck_filter or month_filter or tdp_filter or source_filter or dest_filter
     filtered = {"Leg Product Detail": lpd_filtered}
 
     for name in ["Leg Detail", "Outlier Legs"]:
@@ -727,8 +734,43 @@ truck_filter = st.sidebar.multiselect(
     "Truck Type", all_trucks, default=[], placeholder="All truck types"
 )
 
-# Month and TDP (leg-level)
+# Source and Destination (plant codes in LPD, descriptions from LD)
 ld_raw = sheets.get("Leg Detail", pd.DataFrame())
+
+
+def _plant_label_map(df, code_col, desc_col):
+    if df.empty or code_col not in df.columns or desc_col not in df.columns:
+        return {}
+    pairs = df[[code_col, desc_col]].dropna().drop_duplicates(code_col)
+    return dict(zip(pairs[code_col].astype(str), pairs[desc_col].astype(str)))
+
+
+src_desc_map = _plant_label_map(ld_raw, "Sending Plant", "Sending Desc")
+dst_desc_map = _plant_label_map(ld_raw, "Receiving Plant", "Receiving Desc")
+
+if "Sending Plant" in lpd_raw.columns:
+    all_sources = sorted(lpd_raw["Sending Plant"].dropna().astype(str).unique())
+else:
+    all_sources = []
+source_labels = [f"{c} — {src_desc_map[c]}" if c in src_desc_map else c for c in all_sources]
+source_label_to_code = {lbl: c for lbl, c in zip(source_labels, all_sources)}
+source_selected_labels = st.sidebar.multiselect(
+    "Source (Sending Plant)", source_labels, default=[], placeholder="All sources"
+)
+source_filter = [source_label_to_code[l] for l in source_selected_labels]
+
+if "Receiving Plant" in lpd_raw.columns:
+    all_dests = sorted(lpd_raw["Receiving Plant"].dropna().astype(str).unique())
+else:
+    all_dests = []
+dest_labels = [f"{c} — {dst_desc_map[c]}" if c in dst_desc_map else c for c in all_dests]
+dest_label_to_code = {lbl: c for lbl, c in zip(dest_labels, all_dests)}
+dest_selected_labels = st.sidebar.multiselect(
+    "Destination (Receiving Plant)", dest_labels, default=[], placeholder="All destinations"
+)
+dest_filter = [dest_label_to_code[l] for l in dest_selected_labels]
+
+# Month and TDP (leg-level)
 if "Month" in ld_raw.columns:
     all_months = sorted(ld_raw["Month"].dropna().astype(str).unique())
 else:
@@ -758,6 +800,10 @@ if route_filter:
     active_filters.append(f"Route: **{len(route_filter)}** selected")
 if truck_filter:
     active_filters.append(f"Truck: **{', '.join(truck_filter)}**")
+if source_filter:
+    active_filters.append(f"Source: **{len(source_filter)}** selected")
+if dest_filter:
+    active_filters.append(f"Dest: **{len(dest_filter)}** selected")
 if month_filter:
     active_filters.append(f"Month: **{len(month_filter)}** selected")
 if tdp_filter:
@@ -772,7 +818,8 @@ if st.sidebar.button("Reset Filters"):
 
 # ── Apply all filters ──
 filtered = compute_filtered_data(sheets, material_set, dispatch_filter, cluster_filter,
-                                 route_filter, truck_filter, month_filter, tdp_filter)
+                                 route_filter, truck_filter, month_filter, tdp_filter,
+                                 source_filter, dest_filter)
 
 lpd = filtered.get("Leg Product Detail", pd.DataFrame())
 ld = filtered.get("Leg Detail", pd.DataFrame())
