@@ -698,43 +698,10 @@ if any_product_filter:
 else:
     material_set = None
 
-# ── Sidebar: Logistics Filters ──
+# ── Sidebar: Logistics Filters (cross-filtering cascade) ──
 st.sidebar.header("Logistics Filters")
 
-# DD vs NDD
-dispatch_filter = st.sidebar.multiselect(
-    "Dispatch Type", ["DD", "NDD"], default=[], placeholder="All (DD + NDD)"
-)
-
-# Cluster / State
 lpd_raw = sheets.get("Leg Product Detail", pd.DataFrame())
-if "Cluster Desc" in lpd_raw.columns:
-    all_clusters = sorted(lpd_raw["Cluster Desc"].dropna().astype(str).unique())
-else:
-    all_clusters = []
-cluster_filter = st.sidebar.multiselect(
-    "Cluster (State)", all_clusters, default=[], placeholder="All clusters"
-)
-
-# Route
-if "Route Code" in lpd_raw.columns:
-    all_routes = sorted(lpd_raw["Route Code"].dropna().astype(str).unique())
-else:
-    all_routes = []
-route_filter = st.sidebar.multiselect(
-    "Route", all_routes, default=[], placeholder="All routes"
-)
-
-# Truck Type
-if "Truck Type" in lpd_raw.columns:
-    all_trucks = sorted(lpd_raw["Truck Type"].dropna().astype(str).unique())
-else:
-    all_trucks = []
-truck_filter = st.sidebar.multiselect(
-    "Truck Type", all_trucks, default=[], placeholder="All truck types"
-)
-
-# Source and Destination (plant codes in LPD, descriptions from LD)
 ld_raw = sheets.get("Leg Detail", pd.DataFrame())
 
 
@@ -748,43 +715,102 @@ def _plant_label_map(df, code_col, desc_col):
 src_desc_map = _plant_label_map(ld_raw, "Sending Plant", "Sending Desc")
 dst_desc_map = _plant_label_map(ld_raw, "Receiving Plant", "Receiving Desc")
 
-if "Sending Plant" in lpd_raw.columns:
-    all_sources = sorted(lpd_raw["Sending Plant"].dropna().astype(str).unique())
-else:
-    all_sources = []
-source_labels = [f"{c} — {src_desc_map[c]}" if c in src_desc_map else c for c in all_sources]
-source_label_to_code = {lbl: c for lbl, c in zip(source_labels, all_sources)}
-source_selected_labels = st.sidebar.multiselect(
-    "Source (Sending Plant)", source_labels, default=[], placeholder="All sources"
-)
-source_filter = [source_label_to_code[l] for l in source_selected_labels]
+# Cascade space: LD restricted by product filter via leg IDs
+ld_space = ld_raw.copy()
+if material_set is not None and "Leg ID" in lpd_raw.columns and "Material" in lpd_raw.columns:
+    mat_legs = set(lpd_raw.loc[lpd_raw["Material"].isin(material_set), "Leg ID"].unique())
+    ld_space = ld_space[ld_space["Leg ID"].isin(mat_legs)]
 
-if "Receiving Plant" in lpd_raw.columns:
-    all_dests = sorted(lpd_raw["Receiving Plant"].dropna().astype(str).unique())
-else:
-    all_dests = []
-dest_labels = [f"{c} — {dst_desc_map[c]}" if c in dst_desc_map else c for c in all_dests]
-dest_label_to_code = {lbl: c for lbl, c in zip(dest_labels, all_dests)}
-dest_selected_labels = st.sidebar.multiselect(
-    "Destination (Receiving Plant)", dest_labels, default=[], placeholder="All destinations"
-)
-dest_filter = [dest_label_to_code[l] for l in dest_selected_labels]
+# Read previous selections (by widget key); source/dest store "CODE — DESC" labels
+_src_prev = [l.split(" — ")[0] for l in st.session_state.get("f_source", [])]
+_dst_prev = [l.split(" — ")[0] for l in st.session_state.get("f_dest", [])]
+_SELECTIONS = {
+    "Dispatch Type":   st.session_state.get("f_dispatch", []),
+    "Cluster Desc":    st.session_state.get("f_cluster", []),
+    "Route Code":      st.session_state.get("f_route", []),
+    "Truck Type":      st.session_state.get("f_truck", []),
+    "Sending Plant":   _src_prev,
+    "Receiving Plant": _dst_prev,
+    "Month":           st.session_state.get("f_month", []),
+    "TDP":             st.session_state.get("f_tdp", []),
+}
 
-# Month and TDP (leg-level)
-if "Month" in ld_raw.columns:
-    all_months = sorted(ld_raw["Month"].dropna().astype(str).unique())
-else:
-    all_months = []
+
+def _opts(col):
+    df = ld_space
+    for c, vals in _SELECTIONS.items():
+        if c == col or not vals or c not in df.columns:
+            continue
+        df = df[df[c].astype(str).isin([str(v) for v in vals])]
+    if col not in df.columns:
+        return []
+    return sorted(df[col].dropna().astype(str).unique())
+
+
+def _sanitize(key, valid):
+    if key in st.session_state:
+        st.session_state[key] = [v for v in st.session_state[key] if v in valid]
+
+
+# Dispatch Type
+disp_avail = set(_opts("Dispatch Type"))
+disp_opts = [d for d in ["DD", "NDD"] if d in disp_avail]
+_sanitize("f_dispatch", disp_opts)
+dispatch_filter = st.sidebar.multiselect(
+    "Dispatch Type", disp_opts, key="f_dispatch", placeholder="All (DD + NDD)"
+)
+
+# Cluster
+cluster_opts = _opts("Cluster Desc")
+_sanitize("f_cluster", cluster_opts)
+cluster_filter = st.sidebar.multiselect(
+    "Cluster (State)", cluster_opts, key="f_cluster", placeholder="All clusters"
+)
+
+# Route
+route_opts = _opts("Route Code")
+_sanitize("f_route", route_opts)
+route_filter = st.sidebar.multiselect(
+    "Route", route_opts, key="f_route", placeholder="All routes"
+)
+
+# Truck Type
+truck_opts = _opts("Truck Type")
+_sanitize("f_truck", truck_opts)
+truck_filter = st.sidebar.multiselect(
+    "Truck Type", truck_opts, key="f_truck", placeholder="All truck types"
+)
+
+# Source (labels: "CODE — DESC")
+src_codes_avail = _opts("Sending Plant")
+src_labels_avail = [f"{c} — {src_desc_map[c]}" if c in src_desc_map else c for c in src_codes_avail]
+_sanitize("f_source", src_labels_avail)
+source_sel_labels = st.sidebar.multiselect(
+    "Source (Sending Plant)", src_labels_avail, key="f_source", placeholder="All sources"
+)
+source_filter = [lbl.split(" — ")[0] for lbl in source_sel_labels]
+
+# Destination
+dst_codes_avail = _opts("Receiving Plant")
+dst_labels_avail = [f"{c} — {dst_desc_map[c]}" if c in dst_desc_map else c for c in dst_codes_avail]
+_sanitize("f_dest", dst_labels_avail)
+dest_sel_labels = st.sidebar.multiselect(
+    "Destination (Receiving Plant)", dst_labels_avail, key="f_dest", placeholder="All destinations"
+)
+dest_filter = [lbl.split(" — ")[0] for lbl in dest_sel_labels]
+
+# Month
+month_opts = _opts("Month")
+_sanitize("f_month", month_opts)
 month_filter = st.sidebar.multiselect(
-    "Month", all_months, default=[], placeholder="All months"
+    "Month", month_opts, key="f_month", placeholder="All months"
 )
 
-if "TDP" in ld_raw.columns:
-    all_tdps = sorted(ld_raw["TDP"].dropna().astype(str).unique())
-else:
-    all_tdps = []
+# TDP
+tdp_opts = _opts("TDP")
+_sanitize("f_tdp", tdp_opts)
 tdp_filter = st.sidebar.multiselect(
-    "TDP", all_tdps, default=[], placeholder="All TDPs"
+    "TDP", tdp_opts, key="f_tdp", placeholder="All TDPs"
 )
 
 # Sidebar summary
@@ -814,6 +840,10 @@ else:
     st.sidebar.info("No filter applied - showing all data")
 
 if st.sidebar.button("Reset Filters"):
+    for k in ["f_dispatch", "f_cluster", "f_route", "f_truck",
+              "f_source", "f_dest", "f_month", "f_tdp"]:
+        if k in st.session_state:
+            del st.session_state[k]
     st.rerun()
 
 # ── Apply all filters ──
