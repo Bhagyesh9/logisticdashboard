@@ -52,43 +52,10 @@ st.markdown("""
         min-height: 3rem !important;
         z-index: 999990 !important;
     }
-    /* Force all possible sidebar expand-arrow selectors to show at top-left */
-    [data-testid="collapsedControl"],
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="stSidebarCollapseButton"],
-    button[kind="headerNoPadding"] {
-        display: flex !important;
+    /* Make sure sidebar itself is never forcibly hidden */
+    [data-testid="stSidebar"] {
+        display: block !important;
         visibility: visible !important;
-        opacity: 1 !important;
-        position: fixed !important;
-        top: 0.5rem !important;
-        left: 0.5rem !important;
-        z-index: 999999 !important;
-        background: #1B2A4A !important;
-        color: white !important;
-        border-radius: 6px !important;
-        padding: 4px !important;
-    }
-    [data-testid="collapsedControl"] svg,
-    [data-testid="stSidebarCollapsedControl"] svg,
-    [data-testid="stSidebarCollapseButton"] svg,
-    header[data-testid="stHeader"] svg {
-        color: white !important;
-        fill: white !important;
-        width: 1.5rem !important;
-        height: 1.5rem !important;
-    }
-    /* Our own fallback "Show Filters" button (always present, but hidden when sidebar expanded) */
-    #show-filters-fallback {
-        position: fixed; top: 0.5rem; left: 0.5rem; z-index: 999998;
-        background: #1B2A4A; color: white; border: none;
-        padding: 6px 14px; border-radius: 6px; cursor: pointer;
-        font-weight: 600; font-size: 0.85rem;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-    }
-    [data-testid="stSidebar"][aria-expanded="true"] ~ * #show-filters-fallback,
-    [data-testid="stSidebar"]:not([aria-expanded="false"]) ~ * #show-filters-fallback {
-        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -110,22 +77,23 @@ components.html("""
         btn.onclick = function() {
             // Try 1: click Streamlit's native expand button if present
             var nativeBtn = doc.querySelector(
-                '[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"], [data-testid="stSidebarCollapseButton"]'
+                '[data-testid="collapsedControl"], [data-testid="stSidebarCollapsedControl"]'
             );
             if (nativeBtn) { nativeBtn.click(); return; }
-            // Try 2: find any button with sidebar-related aria-label or testid
+            // Try 2: any button whose aria-label mentions sidebar
             var buttons = doc.querySelectorAll('button');
             for (var i = 0; i < buttons.length; i++) {
                 var b = buttons[i];
                 var lbl = (b.getAttribute('aria-label') || '').toLowerCase();
-                var tid = (b.getAttribute('data-testid') || '').toLowerCase();
-                if (lbl.indexOf('sidebar') >= 0 || tid.indexOf('sidebar') >= 0 || tid.indexOf('collapse') >= 0) {
+                if (lbl.indexOf('sidebar') >= 0 || lbl.indexOf('open navigation') >= 0) {
                     b.click();
                     return;
                 }
             }
-            // Fallback: reload the page — initial_sidebar_state='expanded' will re-open it
-            window.parent.location.reload();
+            // Hard fallback: force a fresh page load with cache-bust, preserving query params
+            var url = window.parent.location.href;
+            var sep = url.indexOf('?') >= 0 ? '&' : '?';
+            window.parent.location.href = url.split('#')[0] + sep + '_r=' + Date.now();
         };
         doc.body.appendChild(btn);
     }
