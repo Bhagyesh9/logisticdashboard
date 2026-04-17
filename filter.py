@@ -36,11 +36,21 @@ st.markdown("""
         padding: 14px 18px; margin-bottom: 10px;
         background: rgba(68,114,196,0.05);
     }
-    /* Hide toolbar, deploy button, source code viewer, main menu */
-    .stAppDeployButton, #MainMenu, header[data-testid="stHeader"],
+    /* Hide toolbar, deploy button, source code viewer, main menu — but KEEP header so sidebar toggle stays visible */
+    .stAppDeployButton, #MainMenu,
     button[title="View app source"], .viewerBadge_container__r5tak,
     ._profileContainer_gzau3_53, [data-testid="stToolbar"] {
         display: none !important;
+    }
+    /* Make header transparent (no bar visible) but keep the sidebar collapse/expand button functional */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+    /* Ensure collapsed sidebar control is always visible */
+    [data-testid="collapsedControl"] {
+        display: block !important;
+        visibility: visible !important;
     }
 </style>
 """, unsafe_allow_html=True)
